@@ -1,0 +1,36 @@
+dataset:
+  name: "movielens-1m"
+  raw_path: "data/raw/ml-1m"
+  processed_path: "data/processed"
+  knowledge_path: "data/knowledge"
+  train_ratio: 0.9
+  test_ratio: 0.1
+  positive_threshold: 4.0
+
+llm:
+  provider: "lm_studio"
+  api_base: "http://localhost:1234/v1"
+  model_name: "google/gemma-4-e2b"
+  timeout: 90
+  batch_size: 4
+
+encoder:
+  model_name: "sentence-transformers/all-MiniLM-L6-v2"
+  embedding_dim: 384
+  device: "cuda"
+
+adaptor:
+  num_shared_experts: 3
+  num_dedicated_experts: 3
+  expert_hidden_dims: [128, 32]
+  output_dim: 32
+  dropout: 0.2
+
+backbone:
+  embedding_dim: 32
+  mlp_hidden_dims: [128, 64, 32]
+  dropout: 0.2
+  learning_rate: 0.001
+  weight_decay: 0.00001
+  batch_size: 512
+  epochs: 10
