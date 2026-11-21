@@ -15,7 +15,9 @@ from src.evaluation.metrics import (
     calculate_ndcg_at_k,
     calculate_mrr_at_k
 )
+from unittest.mock import patch, MagicMock
 from src.knowledge.text_encoder import TextEncoder
+from src.knowledge.production_gemma_pipeline import query_gemma_clean
 
 
 def test_hybrid_expert_adaptor():
@@ -146,6 +148,40 @@ def test_text_encoder_load_embeddings():
     assert empty_dict == {}
 
 
+def test_query_gemma_clean_null_and_fallback_handling():
+    # Case 1: content is null, reasoning_content provides fallback answer
+    mock_resp_fallback = MagicMock()
+    mock_resp_fallback.status_code = 200
+    mock_resp_fallback.json.return_value = {
+        "choices": [{
+            "message": {
+                "content": None,
+                "reasoning_content": "Step 1 analysis.\n\nA tense sci-fi thriller exploring identity and fate."
+            }
+        }]
+    }
+    with patch("src.knowledge.production_gemma_pipeline.requests.post", return_value=mock_resp_fallback):
+        assert query_gemma_clean("test prompt") == "A tense sci-fi thriller exploring identity and fate."
+
+    # Case 2: both content and reasoning_content are null (must not raise AttributeError)
+    mock_resp_empty = MagicMock()
+    mock_resp_empty.status_code = 200
+    mock_resp_empty.json.return_value = {
+        "choices": [{"message": {"content": None, "reasoning_content": None}}]
+    }
+    with patch("src.knowledge.production_gemma_pipeline.requests.post", return_value=mock_resp_empty):
+        assert query_gemma_clean("test prompt") == ""
+
+    # Case 3: normal clean content
+    mock_resp_ok = MagicMock()
+    mock_resp_ok.status_code = 200
+    mock_resp_ok.json.return_value = {
+        "choices": [{"message": {"content": "A classic drama exploring resilience and friendship."}}]
+    }
+    with patch("src.knowledge.production_gemma_pipeline.requests.post", return_value=mock_resp_ok):
+        assert query_gemma_clean("test prompt") == "A classic drama exploring resilience and friendship."
+
+
 if __name__ == "__main__":
     test_hybrid_expert_adaptor()
     test_kar_ncf_forward()
@@ -153,4 +189,5 @@ if __name__ == "__main__":
     test_kar_dataset_and_fallback()
     test_evaluation_metrics()
     test_text_encoder_load_embeddings()
+    test_query_gemma_clean_null_and_fallback_handling()
     print("All enhanced KAR unit and integration tests passed successfully!")

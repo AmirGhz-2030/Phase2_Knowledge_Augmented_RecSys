@@ -29,25 +29,25 @@ def query_gemma_clean(user_prompt: str, max_tokens: int = 600) -> str:
         if resp.status_code == 200:
             res_json = resp.json()
             msg = res_json["choices"][0]["message"]
-            content = msg.get("content", "").strip()
+            content = (msg.get("content") or "").strip()
             # If content exists, it is the clean final answer
             if content and len(content) > 20:
                 return content
-            # Fallback if content was empty
-            reasoning = msg.get("reasoning_content", "")
-            return reasoning.split("\n\n")[-1].strip()
+            # Fallback if content was empty or null
+            reasoning = msg.get("reasoning_content") or ""
+            return reasoning.split("\n\n")[-1].strip() if reasoning else ""
         return ""
     except Exception:
         return ""
 
 
-def run_full_clean_pipeline():
+def run_full_clean_pipeline(num_movies: int = 100, num_users: int = 349):
     base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     data_dir = os.path.join(base_dir, "data", "processed")
     knowledge_dir = os.path.join(base_dir, "data", "knowledge")
     os.makedirs(knowledge_dir, exist_ok=True)
 
-    # 1. Process Movie Knowledge (Top 100)
+    # 1. Process Movie Knowledge
     movies_df = pd.read_csv(os.path.join(data_dir, "movies_clean.csv"))
     item_json_path = os.path.join(knowledge_dir, "gemma_item_knowledge.json")
     
@@ -56,8 +56,8 @@ def run_full_clean_pipeline():
         with open(item_json_path, "r", encoding="utf-8") as f:
             existing_items = json.load(f)
 
-    movies_subset = movies_df.head(100)
-    print("🎬 Generating 100 Clean Movie Factual Descriptions (4 Threads, 600 Tokens)...")
+    movies_subset = movies_df.head(num_movies)
+    print(f"🎬 Generating {len(movies_subset)} Clean Movie Factual Descriptions (4 Threads, 600 Tokens)...")
 
     def process_movie(row):
         prompt = (
@@ -78,7 +78,7 @@ def run_full_clean_pipeline():
         json.dump(existing_items, f, indent=2, ensure_ascii=False)
     print(f"✅ Saved {len(existing_items)} clean movies to {item_json_path}")
 
-    # 2. Process User Preference Reasoning (Top 100)
+    # 2. Process User Preference Reasoning
     train_df = pd.read_csv(os.path.join(data_dir, "train.csv"))
     user_json_path = os.path.join(knowledge_dir, "gemma_user_reasoning.json")
     
@@ -87,8 +87,9 @@ def run_full_clean_pipeline():
         with open(user_json_path, "r", encoding="utf-8") as f:
             existing_users = json.load(f)
 
-    target_uids = list(range(100))
-    print("👤 Generating 100 Clean User Preference Profiles (4 Threads, 600 Tokens)...")
+    max_uid = int(train_df["user_idx"].max()) + 1
+    target_uids = list(range(min(num_users, max_uid)))
+    print(f"👤 Generating {len(target_uids)} Clean User Preference Profiles (4 Threads, 600 Tokens)...")
 
     def process_user(u_idx):
         u_history = train_df[(train_df["user_idx"] == u_idx) & (train_df["label"] == 1)].tail(8)

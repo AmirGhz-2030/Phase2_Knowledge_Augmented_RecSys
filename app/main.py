@@ -48,12 +48,13 @@ def load_trained_kar_model(n_users, n_items):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = KARNCF(num_users=n_users, num_items=n_items, use_knowledge=True)
     ckpt_path = os.path.join(PROCESSED_DIR, "best_kar_ncf.pt")
-    if os.path.exists(ckpt_path):
+    ckpt_loaded = os.path.exists(ckpt_path)
+    if ckpt_loaded:
         ckpt = torch.load(ckpt_path, map_location=device, weights_only=True)
         model.load_state_dict(ckpt)
     model.to(device)
     model.eval()
-    return model, device
+    return model, device, ckpt_loaded
 
 @st.cache_data
 def load_dataset_stats():
@@ -236,35 +237,56 @@ elif nav_choice == "🔍 LLM Knowledge Inspector":
     with col1:
         st.subheader("👤 User Preference Reasoning (Factorized)")
         if user_know and data:
-            available_users = [str(i) for i in range(100) if str(i) in user_know]
-            selected_uid = st.selectbox("Select User Index (Top 100 Gemma Profiles)", options=available_users, index=0)
-            
-            # Show user history (exact 8 movies used in LLM prompt context)
-            train_df = data["train_df"]
-            user_history = train_df[(train_df["user_idx"] == int(selected_uid)) & (train_df["label"] == 1)].tail(8)
-            
-            st.markdown(f"**Liked Movies for User #{selected_uid} (Prompt Context - 8 Films):**")
-            st.dataframe(user_history[["title", "genres", "rating"]], use_container_width=True, hide_index=True)
-            
-            st.markdown("**🧠 Gemma 4 E2B Synthesized Taste Profile:**")
-            st.info(user_know[selected_uid])
+            available_users = sorted(
+                [str(k) for k in user_know.keys() if str(k).isdigit()],
+                key=int
+            )
+            if available_users:
+                selected_uid = st.selectbox(
+                    f"Select User Index ({len(available_users)} Gemma Profiles)",
+                    options=available_users,
+                    index=0
+                )
+                
+                # Show user history (exact 8 movies used in LLM prompt context)
+                train_df = data["train_df"]
+                user_history = train_df[(train_df["user_idx"] == int(selected_uid)) & (train_df["label"] == 1)].tail(8)
+                
+                st.markdown(f"**Liked Movies for User #{selected_uid} (Prompt Context - 8 Films):**")
+                st.dataframe(user_history[["title", "genres", "rating"]], use_container_width=True, hide_index=True)
+                
+                st.markdown("**🧠 Gemma 4 E2B Synthesized Taste Profile:**")
+                st.info(user_know[selected_uid])
+            else:
+                st.warning("No valid Gemma user reasoning entries found.")
         else:
             st.warning("No Gemma user reasoning data available.")
 
     with col2:
         st.subheader("🎬 Item Factual Knowledge")
         if item_know and data:
-            available_items = [str(i) for i in range(100) if str(i) in item_know]
-            selected_mid = st.selectbox("Select Movie Index (Top 100 Catalog Films)", options=available_items, index=0)
-            
             movies_df = data["movies_df"]
-            movie_row = movies_df[movies_df["movie_idx"] == int(selected_mid)].iloc[0]
-            
-            st.markdown(f"**Target Movie:** `{movie_row['title']}`")
-            st.markdown(f"**Genres:** `{movie_row['genres']}`")
-            
-            st.markdown("**🧠 Gemma 4 E2B Cinematic & Thematic Context:**")
-            st.success(item_know[selected_mid])
+            valid_movie_ids = set(movies_df["movie_idx"].astype(int).tolist())
+            available_items = sorted(
+                [str(k) for k in item_know.keys() if str(k).isdigit() and int(k) in valid_movie_ids],
+                key=int
+            )
+            if available_items:
+                selected_mid = st.selectbox(
+                    f"Select Movie Index ({len(available_items)} Catalog Films)",
+                    options=available_items,
+                    index=0
+                )
+                
+                movie_row = movies_df[movies_df["movie_idx"] == int(selected_mid)].iloc[0]
+                
+                st.markdown(f"**Target Movie:** `{movie_row['title']}`")
+                st.markdown(f"**Genres:** `{movie_row['genres']}`")
+                
+                st.markdown("**🧠 Gemma 4 E2B Cinematic & Thematic Context:**")
+                st.success(item_know[selected_mid])
+            else:
+                st.warning("No valid Gemma item knowledge entries found.")
         else:
             st.warning("No Gemma item knowledge data available.")
 
@@ -300,7 +322,13 @@ elif nav_choice == "🎮 Live Recommendation Playground":
             
             # Real-Time GPU Model Inference using best KAR-NCF Checkpoint
             t_start = time.time()
-            model, device = load_trained_kar_model(data["n_users"], data["n_items"])
+            model, device, ckpt_loaded = load_trained_kar_model(data["n_users"], data["n_items"])
+            if not ckpt_loaded:
+                st.warning(
+                    "⚠️ Trained checkpoint `data/processed/best_kar_ncf.pt` was not found. "
+                    "Predictions below use randomly initialized (untrained) weights — run "
+                    "`python -m src.evaluation.benchmark` first to generate trained checkpoints."
+                )
             u_emb_dict, i_emb_dict = load_knowledge_embeddings()
             movies_df = data["movies_df"]
             train_df = data["train_df"]
@@ -335,7 +363,7 @@ elif nav_choice == "🎮 Live Recommendation Playground":
             top_indices = np.argsort(masked_preds)[::-1][:top_k]
             movies_indexed = movies_df.set_index("movie_idx")
             top_recs = movies_indexed.loc[top_indices].reset_index()
-            top_recs["Rank"] = [f"#{r}" for r in range(1, top_k + 1)]
+            top_recs["Rank"] = [f"#{r}" for r in range(1, len(top_recs) + 1)]
             top_recs["Score (Prob)"] = [f"{preds[idx]:.4f}" for idx in top_indices]
             top_recs["Knowledge Augmentation"] = "🧠 Enabled (Gemma + MoE 32D)"
             

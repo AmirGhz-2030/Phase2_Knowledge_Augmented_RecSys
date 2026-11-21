@@ -121,7 +121,7 @@ Phase2_Knowledge_Augmented_RecSys/
 │       ├── adaptor.py              # لایه چندمتخصصه MoE با اتصال Residual Skip
 │       └── kar_ncf.py              # شبکه عصبی تلفیقی KAR-NCF
 ├── tests/
-│   └── test_kar_models.py          # تست‌های واحد و یکپارچگی (۶ تست خودکار)
+│   └── test_kar_models.py          # تست‌های واحد و یکپارچگی (۷ تست خودکار)
 ├── LICENSE                         # مجوز MIT
 ├── pytest.ini                      # پیکربندی مسیر تست‌های Pytest
 ├── requirements.txt                # لیست پکیج‌ها و وابستگی‌های پایتون

@@ -76,8 +76,7 @@ graph TD
 
 ## 📊 Empirical Benchmark Results
 
-Evaluated on **MovieLens-1M** ($6,040$ users, $3,883$ movies, $1,000,209$ ratings) using a **per-user chronological 90/10 split** (zero temporal leakage) and binary feedback protocol ($r \ge 4 
-ightarrow y=1$).
+Evaluated on **MovieLens-1M** ($6,040$ users, $3,883$ movies, $1,000,209$ ratings) using a **per-user chronological 90/10 split** (zero temporal leakage) and binary feedback protocol ($r \ge 4 \rightarrow y=1$).
 
 | Model Architecture | LLM / Knowledge Backbone | Adaptor Layer | Test AUC ↑ | Test LogLoss ↓ | Relative Improvement |
 | :--- | :--- | :---: | :---: | :---: | :---: |
@@ -122,7 +121,7 @@ Phase2_Knowledge_Augmented_RecSys/
 │       ├── adaptor.py              # Hybrid-Expert MoE with Residual Skip
 │       └── kar_ncf.py              # KAR-NCF Deep Fusion Network
 ├── tests/
-│   └── test_kar_models.py          # PyTorch unit & integration tests (6 tests)
+│   └── test_kar_models.py          # PyTorch unit & integration tests (7 tests)
 ├── LICENSE                         # MIT License
 ├── pytest.ini                      # Pytest path & discovery config
 ├── requirements.txt                # Python dependencies
