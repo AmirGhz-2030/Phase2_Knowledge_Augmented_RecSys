@@ -36,6 +36,7 @@ data/raw/
 data/processed/*.csv
 data/processed/*.pt
 !data/processed/kar_benchmark_results.csv
+!data/processed/ablation_stats_results.csv
 data/knowledge/*.pt
 data/knowledge/*.npy
 data/knowledge/*.json

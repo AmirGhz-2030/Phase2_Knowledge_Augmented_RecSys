@@ -4,6 +4,7 @@ dataset:
   processed_path: "data/processed"
   knowledge_path: "data/knowledge"
   train_ratio: 0.9
+  val_ratio: 0.1  # Chronological per-user validation split from train set (0.0 = legacy 90/10)
   test_ratio: 0.1
   positive_threshold: 4.0
 

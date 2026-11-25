@@ -1,0 +1,6 @@
+Condition,Test_AUC,Test_LogLoss,Delta_AUC_vs_Base
+Base NCF (No Knowledge),0.81,0.535,0.0
+KAR-NCF (Full Semantic Knowledge),0.8133,0.5293,0.0032
+Ablation: Zeroed Knowledge,0.7924,0.5655,-0.0176
+Ablation: Matched-Variance Gaussian Noise,0.7831,0.5811,-0.0269
+Ablation: Shuffled Knowledge (Entity Permuted),0.7657,0.5876,-0.0443

@@ -18,6 +18,12 @@ from src.evaluation.metrics import (
 from unittest.mock import patch, MagicMock
 from src.knowledge.text_encoder import TextEncoder
 from src.knowledge.production_gemma_pipeline import query_gemma_clean
+from src.evaluation.benchmark import split_train_val_chronological, build_knowledge_matrix
+from src.evaluation.ablation_and_stats import (
+    compute_paired_bce_ttest,
+    shuffle_knowledge_dict,
+    make_matched_noise_embeddings,
+)
 
 
 def test_hybrid_expert_adaptor():
@@ -182,6 +188,53 @@ def test_query_gemma_clean_null_and_fallback_handling():
         assert query_gemma_clean("test prompt") == "A classic drama exploring resilience and friendship."
 
 
+def test_split_train_val_chronological_no_leakage():
+    df = pd.DataFrame({
+        "user_idx": [0, 0, 0, 0, 0, 1, 1, 2],
+        "movie_idx": [10, 11, 12, 13, 14, 20, 21, 30],
+        "timestamp": [500, 100, 300, 200, 400, 10, 20, 99],
+        "label": [1, 0, 1, 1, 0, 1, 0, 1],
+    })
+    tr, va = split_train_val_chronological(df, val_ratio=0.2)
+    # User 0 has 5 rows -> ceil(5*0.8)=4 train, 1 val (timestamp 500)
+    assert len(tr[tr["user_idx"] == 0]) == 4
+    assert len(va[va["user_idx"] == 0]) == 1
+    assert tr[tr["user_idx"] == 0]["timestamp"].max() < va[va["user_idx"] == 0]["timestamp"].min()
+    # User 2 has 1 row -> stays in train
+    assert len(tr[tr["user_idx"] == 2]) == 1
+    assert len(va[va["user_idx"] == 2]) == 0
+    # val_ratio=0 returns full train and empty val
+    tr0, va0 = split_train_val_chronological(df, val_ratio=0.0)
+    assert len(tr0) == len(df) and len(va0) == 0
+
+
+def test_ablation_and_paired_ttest_helpers():
+    y_true = np.array([1, 0, 1, 0, 1, 0, 1, 0], dtype=np.float64)
+    base_preds = np.array([0.6, 0.4, 0.6, 0.4, 0.6, 0.4, 0.6, 0.4], dtype=np.float64)
+    kar_preds = np.array([0.9, 0.1, 0.85, 0.15, 0.9, 0.1, 0.88, 0.12], dtype=np.float64)
+    stats_out = compute_paired_bce_ttest(y_true, base_preds, kar_preds)
+    assert stats_out["n_samples"] == 8
+    assert stats_out["mean_bce_reduction"] > 0
+    assert stats_out["t_statistic"] > 0
+    assert stats_out["p_value"] < 0.01
+
+    d = {i: np.full(16, float(i), dtype=np.float32) for i in range(10)}
+    shuf1 = shuffle_knowledge_dict(d, seed=42)
+    shuf2 = shuffle_knowledge_dict(d, seed=42)
+    assert set(shuf1.keys()) == set(d.keys())
+    for k in d:
+        assert np.allclose(shuf1[k], shuf2[k])
+    assert any(not np.allclose(shuf1[k], d[k]) for k in d)
+
+    noise = make_matched_noise_embeddings(d, knowledge_dim=16, seed=42)
+    assert set(noise.keys()) == set(d.keys())
+    assert noise[0].shape == (16,)
+
+    mat = build_knowledge_matrix(d, num_entities=12, knowledge_dim=16, device=torch.device("cpu"))
+    assert mat.shape == (12, 16)
+    assert torch.all(mat[11] == 0.0)
+
+
 if __name__ == "__main__":
     test_hybrid_expert_adaptor()
     test_kar_ncf_forward()
@@ -190,4 +243,6 @@ if __name__ == "__main__":
     test_evaluation_metrics()
     test_text_encoder_load_embeddings()
     test_query_gemma_clean_null_and_fallback_handling()
+    test_split_train_val_chronological_no_leakage()
+    test_ablation_and_paired_ttest_helpers()
     print("All enhanced KAR unit and integration tests passed successfully!")

@@ -96,6 +96,14 @@ def load_benchmark_results():
     return None
 
 
+@st.cache_data
+def load_ablation_results():
+    res_path = os.path.join(PROCESSED_DIR, "ablation_stats_results.csv")
+    if os.path.exists(res_path):
+        return pd.read_csv(res_path)
+    return None
+
+
 @st.cache_resource
 def load_knowledge_embeddings():
     u_path = os.path.join(KNOWLEDGE_DIR, "user_reasoning_embeddings.pt")
@@ -149,6 +157,7 @@ st.sidebar.info(
 
 data = load_dataset_stats()
 bench_df = load_benchmark_results()
+ablation_df = load_ablation_results()
 item_know, user_know = load_knowledge_data()
 
 # ==========================================
@@ -185,15 +194,19 @@ if nav_choice == "📊 Benchmark & Leaderboard":
             st.warning("Benchmark results not found. Please run src/evaluation/benchmark.py")
 
         st.markdown("### 📑 Comparison with Huawei KAR 2023 Paper")
-        kar_auc_val = float(bench_df.iloc[-1]["AUC"]) if bench_df is not None and len(bench_df) >= 2 else 0.8196
-        kar_ll_val = float(bench_df.iloc[-1]["LogLoss"]) if bench_df is not None and len(bench_df) >= 2 else 0.5200
-        kar_imp_val = str(bench_df.iloc[-1]["Improvement"]) if bench_df is not None and len(bench_df) >= 2 else "+0.61% AUC (+0.0050)"
+        kar_auc_val = float(bench_df.iloc[-1]["AUC"]) if bench_df is not None and len(bench_df) >= 2 else 0.8133
+        kar_ll_val = float(bench_df.iloc[-1]["LogLoss"]) if bench_df is not None and len(bench_df) >= 2 else 0.5293
+        kar_imp_val = str(bench_df.iloc[-1]["Improvement"]) if bench_df is not None and len(bench_df) >= 2 else "+0.40% AUC (+0.0032)"
         paper_comparison = pd.DataFrame([
             {"Architecture": "Base Model (NCF)", "LLM / Backbone": "Standard ID", "AUC": 0.7824, "LogLoss": 0.5518, "Status": "Huawei Baseline"},
             {"Architecture": "KAR (Original Huawei 2023)", "LLM / Backbone": "ChatGPT + ChatGLM", "AUC": 0.7919, "LogLoss": 0.5432, "Status": "Huawei +1.22% AUC"},
             {"Architecture": "Our Modernized KAR-NCF", "LLM / Backbone": "Gemma 4 E2B + MoE", "AUC": kar_auc_val, "LogLoss": kar_ll_val, "Status": f"🚀 {kar_imp_val}"}
         ])
         st.dataframe(paper_comparison, use_container_width=True)
+
+        if ablation_df is not None:
+            st.markdown("### 🧪 Adversarial Knowledge Ablations (Held-Out Test)")
+            st.dataframe(ablation_df, use_container_width=True, hide_index=True)
 
     with col_chart:
         st.subheader("📊 Metric Comparison Chart")

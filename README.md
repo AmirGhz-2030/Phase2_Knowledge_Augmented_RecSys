@@ -76,18 +76,18 @@ graph TD
 
 ## 📊 Empirical Benchmark Results
 
-Evaluated on **MovieLens-1M** ($6,040$ users, $3,883$ movies, $1,000,209$ ratings) using a **per-user chronological 90/10 split** (zero temporal leakage) and binary feedback protocol ($r \ge 4 \rightarrow y=1$).
+Evaluated on **MovieLens-1M** ($6,040$ users, $3,883$ movies, $1,000,209$ ratings) using a **leak-free per-user chronological Train/Val/Test split** (`Train = 815,260` / `Val = 87,566` / `Untouched Test = 97,383`, binary feedback $r \ge 4 \implies y=1$), where best checkpoints are selected strictly on **Validation AUC** and evaluated once on the untouched Test set.
 
 | Model Architecture | LLM / Knowledge Backbone | Adaptor Layer | Test AUC ↑ | Test LogLoss ↓ | Relative Improvement |
 | :--- | :--- | :---: | :---: | :---: | :---: |
-| **Base NCF** *(Baseline)* | Standard One-Hot IDs | None | `0.8146` | `0.5265` | Baseline |
+| **Base NCF** *(Baseline)* | Standard One-Hot IDs | None | `0.8100` | `0.5350` | Baseline |
 | **Huawei KAR (2023 Paper)** | ChatGPT-3.5 + ChatGLM | Standard MoE | `0.7919` | `0.5432` | $+1.22\%$ vs Huawei Base |
-| **Our KAR-NCF (Modernized)** | **Gemma 4 E2B + Hybrid Metadata** | **Residual MoE (32D)** | **`0.8196`** | **`0.5200`** | **🚀 $+0.61\%$ AUC ($+0.0050$)** |
+| **Our KAR-NCF (Modernized)** | **Gemma 4 E2B + Hybrid Metadata** | **Residual MoE (32D)** | **`0.8133`** | **`0.5293`** | **🚀 $+0.40\%$ AUC ($+0.0032$)** |
 
 > **Key Findings & Methodological Transparency:**
-> 1. **Hybrid Knowledge Coverage:** Factorized Gemma 4 E2B reasoning is extracted for core sampled profiles (349 users / 100 catalog movies) and seamlessly blended with structured metadata/history profiles encoded via `all-MiniLM-L6-v2` across all 6,038 active users and 3,883 movies—achieving a verified **`0.8196` AUC** ($+0.0050$ over Base NCF).
-> 2. **Statistical Significance & Adversarial Ablation:** Across the full held-out test set ($N = 97,383$), the gain is highly significant (paired $t$-test $t = 9.40$, $p = 5.76 \times 10^{-21}$). Zeroing (`0.7989`), adding Gaussian noise (`0.7878`), or shuffling (`0.7769`) the knowledge vectors drops KAR-NCF strictly below Base NCF (`0.8146`), confirming the improvement comes from semantic alignment rather than extra MoE parameters.
-> 3. **Residual Skip Stability:** The residual projection stabilizes MoE gradient propagation during backpropagation under **Best Checkpoint Verification**.
+> 1. **Leak-Free Model Selection (`--val-ratio 0.1`, default):** Selecting checkpoints strictly on chronological Validation AUC (`Base NCF Val = 0.8071` at Epoch 5; `KAR-NCF Val = 0.8161` at Epoch 6) achieves **`0.8133` Test AUC** (`-0.0057` LogLoss) on the untouched Test set. *(Running `--val-ratio 0.0` replicates the legacy 90/10 split: Base NCF `0.8146` vs. KAR-NCF `0.8196`, $+0.61\%$ AUC, $t = 9.40, p = 5.76 \times 10^{-21}$.)*
+> 2. **Statistical Significance & Reproducible Adversarial Ablation (`src/evaluation/ablation_and_stats.py`):** Across the full held-out test set ($N = 97,383$), the improvement is highly significant (two-sided paired $t$-test on per-sample BCE losses: $t = 7.77$, $p = 7.87 \times 10^{-15}$). Zeroing (`0.7924`), matched-variance Gaussian noise (`0.7831`), or entity-shuffling (`0.7657`) the knowledge vectors drops KAR-NCF strictly below Base NCF (`0.8100`), proving the gain comes from semantic alignment rather than extra MoE parameters.
+> 3. **Hybrid Knowledge Coverage & Verified Latency:** Factorized Gemma 4 E2B reasoning is extracted for core sampled profiles (349 users / 100 catalog movies) and blended with structured metadata/history profiles encoded via `all-MiniLM-L6-v2` across all 6,038 active users and 3,883 movies. Full-catalog GPU inference across all 3,883 items runs in **`3.74 ms` mean / `3.94 ms` p95** (RTX 3070 Laptop GPU, 50 timed runs).
 
 ---
 
@@ -101,14 +101,15 @@ Phase2_Knowledge_Augmented_RecSys/
 │   └── kar_ml1m_config.yaml        # Hyperparameters & path configs
 ├── data/
 │   ├── raw/ml-1m/                  # MovieLens 1M datasets (.dat)
-│   ├── processed/                  # Train/Test splits & benchmark CSV
+│   ├── processed/                  # Train/Test splits, benchmark & ablation CSVs
 │   └── knowledge/                  # Gemma JSON knowledge & .pt vector caches
 ├── src/
 │   ├── data/
 │   │   ├── dataset.py              # PyTorch Dataset loader
 │   │   └── preprocessor.py         # 90/10 split & binarization pipeline
 │   ├── evaluation/
-│   │   ├── benchmark.py            # GPU training & Best Checkpoint evaluator
+│   │   ├── ablation_and_stats.py   # Adversarial ablations, paired t-test & GPU latency audit
+│   │   ├── benchmark.py            # Leak-free Train/Val/Test GPU training & evaluator
 │   │   └── metrics.py              # AUC, LogLoss, HR@K, NDCG@K, MRR@K
 │   ├── knowledge/
 │   │   ├── prompt_templates.py     # Clean factorized reasoning prompts
@@ -121,7 +122,7 @@ Phase2_Knowledge_Augmented_RecSys/
 │       ├── adaptor.py              # Hybrid-Expert MoE with Residual Skip
 │       └── kar_ncf.py              # KAR-NCF Deep Fusion Network
 ├── tests/
-│   └── test_kar_models.py          # PyTorch unit & integration tests (7 tests)
+│   └── test_kar_models.py          # PyTorch unit & integration tests (9 tests)
 ├── LICENSE                         # MIT License
 ├── pytest.ini                      # Pytest path & discovery config
 ├── requirements.txt                # Python dependencies
@@ -188,9 +189,15 @@ python -m src.knowledge.build_gemma_embeddings
 ```
 
 ### Step 4: Train & Benchmark Models on GPU
-Trains Base NCF and KAR-NCF for 10 epochs using Cosine Annealing learning rate schedules and saves the best model checkpoints:
+Trains Base NCF and KAR-NCF for 10 epochs using Cosine Annealing learning rate schedules with leak-free chronological Validation checkpoint selection (`--val-ratio 0.1` default; pass `--val-ratio 0.0` for legacy 90/10 replication):
 ```bash
 python -m src.evaluation.benchmark
+```
+
+### Step 4b: Reproducible Ablation, Paired t-Test & Latency Audit
+Verifies zeroing, matched-variance Gaussian noise, and entity-shuffle ablations, computes the paired $t$-test on per-sample BCE losses, and benchmarks full-catalog GPU inference latency:
+```bash
+python -m src.evaluation.ablation_and_stats
 ```
 
 ### Step 5: Launch the Interactive Web Studio
